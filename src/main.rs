@@ -262,48 +262,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         tokio::select! {
             Some(slot_info) = slots.next() => {
-                assert!(
-                    !slot_ancestors.contains_key(&slot_info.slot),
-                    "slot {} already present in slot_ancestors",
-                    slot_info.slot
-                );
-                let parent_ancestors = slot_ancestors.entry(slot_info.parent).or_default();
+                if slot_ancestors.contains_key(&slot_info.slot) {
+                    warn!("slot {} already present in slot_ancestors. RPC node stuck?", slot_info.slot);
+                } else {
+                    let parent_ancestors = slot_ancestors.entry(slot_info.parent).or_default();
 
-                let mut ancestors = parent_ancestors.clone();
-                ancestors.insert(slot_info.parent);
-                while ancestors.len() > MAX_TRACKED_ANCESTORS {
-                    let min = *ancestors.iter().min().unwrap();
-                    ancestors.remove(&min);
-                }
+                    let mut ancestors = parent_ancestors.clone();
+                    ancestors.insert(slot_info.parent);
+                    while ancestors.len() > MAX_TRACKED_ANCESTORS {
+                        let min = *ancestors.iter().min().unwrap();
+                        ancestors.remove(&min);
+                    }
 
-                info!(
-                    "slot: {} (parent: {}, {} tracked ancestors)",
-                    slot_info.slot,
-                    slot_info.parent,
-                    ancestors.len()
-                );
-                slot_ancestors.insert(slot_info.slot, ancestors);
-
-                while slot_ancestors.len() > MAX_TRACKED_SLOTS {
-                    let slot_to_remove = *slot_ancestors.keys().next().unwrap();
-                    slot_ancestors.remove(&slot_to_remove);
-                }
-
-                let now = Instant::now();
-                if now.duration_since(last_status_report) > Duration::from_secs(30) {
                     info!(
-                        "tracking {} validators, {} votes processed{}",
-                        towers.len(),
-                        processed_vote_counter,
-                        if incident_counter > 1 {
-                            format!(", {} incidents observed", incident_counter)
-                        } else if incident_counter > 0 {
-                            ", 1 incident observed".into()
-                        } else {
-                            "".into()
-                        }
+                        "slot: {} (parent: {}, {} tracked ancestors)",
+                        slot_info.slot,
+                        slot_info.parent,
+                        ancestors.len()
                     );
-                    last_status_report = now;
+                    slot_ancestors.insert(slot_info.slot, ancestors);
+
+                    while slot_ancestors.len() > MAX_TRACKED_SLOTS {
+                        let slot_to_remove = *slot_ancestors.keys().next().unwrap();
+                        slot_ancestors.remove(&slot_to_remove);
+                    }
+
+                    let now = Instant::now();
+                    if now.duration_since(last_status_report) > Duration::from_secs(30) {
+                        info!(
+                            "tracking {} validators, {} votes processed{}",
+                            towers.len(),
+                            processed_vote_counter,
+                            if incident_counter > 1 {
+                                format!(", {} incidents observed", incident_counter)
+                            } else if incident_counter > 0 {
+                                ", 1 incident observed".into()
+                            } else {
+                                "".into()
+                            }
+                        );
+                        last_status_report = now;
+                    }
                 }
             },
             Some(mut vote) = votes.next() => {
