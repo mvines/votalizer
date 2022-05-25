@@ -18,6 +18,8 @@ use {
 
 mod notifier;
 
+type Incident = String;
+
 struct Tower {
     votes: VecDeque<(Lockout, Signature)>,
     root_slot: Option<Slot>,
@@ -71,15 +73,14 @@ impl Tower {
         }
     }
 
-    async fn process_vote_slot(
+    fn process_vote_slot(
         &mut self,
         vote_account_address: &Pubkey,
         vote_slot: Slot,
         signature: &Signature,
         slot_ancestors: &BTreeMap<Slot, HashSet<Slot>>,
-        notifier: &Notifier,
-        incident_counter: &mut usize,
-    ) {
+    ) -> Option<Incident> {
+        let mut maybe_incident = None;
         self.pop_expired_votes(vote_slot);
 
         if let Some(root_slot) = self.root_slot {
@@ -91,7 +92,7 @@ impl Tower {
             } else if let Some(next_vote_ancestors) = slot_ancestors.get(&vote_slot) {
                 if let Some(last_lockout) = self.last_lockout() {
                     if !slot_ancestors.contains_key(&last_lockout.slot) {
-                        println!(
+                        debug!(
                             "{}: Unable to perform lockout check for {}: last lockout slot {} unknown",
                             vote_account_address, vote_slot,
                             last_lockout.slot,
@@ -192,22 +193,7 @@ impl Tower {
                             );
                         }
 
-                        let msg = format!(
-                            "{}: Lockout violation detected [{}]",
-                            vote_account_address, signature
-                        );
-                        notifier.send(&msg).await;
-                        error!("{}\n{}", msg, incident);
-                        let filename =
-                            format!("incident-{}-{}.log", vote_account_address, signature);
-
-                        File::create(&filename)
-                            .and_then(|mut output| {
-                                use std::io::Write;
-                                writeln!(output, "{}", incident)
-                            })
-                            .unwrap_or_else(|err| error!("Unable to write {}: {}", filename, err));
-                        *incident_counter += 1;
+                        maybe_incident = Some(incident);
                     }
                 }
             } else {
@@ -229,6 +215,8 @@ impl Tower {
         }
         self.votes.push_back((Lockout::new(vote_slot), *signature));
         self.double_lockouts();
+
+        maybe_incident
     }
 }
 
@@ -270,11 +258,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     const MAX_TRACKED_ANCESTORS: usize = 10 * 1_024;
     const MAX_TRACKED_SLOTS: usize = 10 * 1_024;
 
-    let _ = notifier.send(&format!("votalizer active")).await;
+    let _ = notifier.send("votalizer active").await;
     loop {
         tokio::select! {
             Some(slot_info) = slots.next() => {
-                assert!(!slot_ancestors.contains_key(&slot_info.slot), "slot {} already present in slot_ancestors", slot_info.slot);
+                assert!(
+                    !slot_ancestors.contains_key(&slot_info.slot),
+                    "slot {} already present in slot_ancestors",
+                    slot_info.slot
+                );
                 let parent_ancestors = slot_ancestors.entry(slot_info.parent).or_default();
 
                 let mut ancestors = parent_ancestors.clone();
@@ -284,7 +276,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     ancestors.remove(&min);
                 }
 
-                info!("slot: {} (parent: {}, {} tracked ancestors)", slot_info.slot, slot_info.parent, ancestors.len());
+                info!(
+                    "slot: {} (parent: {}, {} tracked ancestors)",
+                    slot_info.slot,
+                    slot_info.parent,
+                    ancestors.len()
+                );
                 slot_ancestors.insert(slot_info.slot, ancestors);
 
                 while slot_ancestors.len() > MAX_TRACKED_SLOTS {
@@ -294,14 +291,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let now = Instant::now();
                 if now.duration_since(last_status_report) > Duration::from_secs(30) {
-                    info!("tracking {} validators, {} votes processed{}", towers.len(), processed_vote_counter,
-                      if incident_counter > 1 {
-                          format!(", {} incidents observed", incident_counter)
-                      } else if incident_counter > 0 {
-                          ", 1 incident observed".into()
-                      } else {
-                          "".into()
-                      }
+                    info!(
+                        "tracking {} validators, {} votes processed{}",
+                        towers.len(),
+                        processed_vote_counter,
+                        if incident_counter > 1 {
+                            format!(", {} incidents observed", incident_counter)
+                        } else if incident_counter > 0 {
+                            ", 1 incident observed".into()
+                        } else {
+                            "".into()
+                        }
                     );
                     last_status_report = now;
                 }
@@ -321,31 +321,72 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 vote.slots.dedup();
                 for pair in vote.slots.chunks_exact(2) {
                     if pair[0] >= pair[1] {
-                        panic!("{}: Invalid vote pair, {:?}, in {}", vote_account_address, pair, signature);
+                        panic!(
+                            "{}: Invalid vote pair, {:?}, in {}",
+                            vote_account_address, pair, signature
+                        );
                     }
                 }
 
                 // Ignore votes for slots earlier than we already have votes for
-                let new_votes = vote.slots.iter().cloned().filter(
-                        |slot| tower.last_voted_slot().map_or(true, |last_voted_slot| *slot > last_voted_slot)
-                    ).collect::<Vec<_>>();
+                let new_votes = vote
+                    .slots
+                    .iter()
+                    .cloned()
+                    .filter(|slot| {
+                        tower
+                            .last_voted_slot()
+                            .map_or(true, |last_voted_slot| *slot > last_voted_slot)
+                    })
+                    .collect::<Vec<_>>();
 
                 if !new_votes.is_empty() {
-                    trace!("{:<44}: new votes: {} [{}]", vote_account_address, new_votes.iter().map(ToString::to_string).join(", "), signature);
+                    trace!(
+                        "{:<44}: new votes: {} [{}]",
+                        vote_account_address,
+                        new_votes.iter().map(ToString::to_string).join(", "),
+                        signature
+                    );
 
                     tower.vote_history.push_back((signature, new_votes.clone()));
                     if let Some((_, first_vote_signature)) = tower.votes.get(0) {
-                        let position = tower.vote_history.iter().position(|(signature, _)| signature == first_vote_signature);
+                        let position = tower
+                            .vote_history
+                            .iter()
+                            .position(|(signature, _)| signature == first_vote_signature);
                         for _ in 0..position.unwrap_or_default() {
                             tower.vote_history.pop_front();
                         }
                     }
                     for slot in new_votes {
-                        tower.process_vote_slot(&vote_account_address, slot, &signature, &slot_ancestors, &notifier, &mut incident_counter).await;
                         processed_vote_counter += 1;
+
+                        if let Some(incident) = tower.process_vote_slot(
+                            &vote_account_address,
+                            slot,
+                            &signature,
+                            &slot_ancestors,
+                        ) {
+                            let msg = format!(
+                                "{}: Lockout violation detected [{}]",
+                                vote_account_address, signature
+                            );
+                            notifier.send(&msg).await;
+                            error!("{}\n{}", msg, incident);
+                            let filename =
+                                format!("incident-{}-{}.log", vote_account_address, signature);
+
+                            File::create(&filename)
+                                .and_then(|mut output| {
+                                    use std::io::Write;
+                                    writeln!(output, "{}", incident)
+                                })
+                                .unwrap_or_else(|err| error!("Unable to write {}: {}", filename, err));
+                            incident_counter += 1;
+                        }
                     }
                 }
-            }
+            },
             else => {
                 break;
             }
