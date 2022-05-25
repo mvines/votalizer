@@ -270,6 +270,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     const MAX_TRACKED_ANCESTORS: usize = 10 * 1_024;
     const MAX_TRACKED_SLOTS: usize = 10 * 1_024;
 
+    let _ = notifier.send(&format!("votalizer active")).await;
     loop {
         tokio::select! {
             Some(slot_info) = slots.next() => {

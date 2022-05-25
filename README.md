@@ -10,6 +10,12 @@ Note that some of the transaction signatures in an incident log file may not be
 available on http://explorer.solana.com. This occurs specifically when a
 transaction lands in a non-finalized fork.
 
+To be notified by Slack when an incident occurs, export your desired Slack
+webhook to the environment before running the votalizer:
+```
+export SLACK_WEBHOOK=https://hooks.slack.com/services/...
+```
+
 ### RPC Node Requirements
 
 The RPC node used by the votalizer must be configured with the `--full-rpc-api`
