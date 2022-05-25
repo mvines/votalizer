@@ -1,0 +1,19 @@
+# Votalizer
+
+The votalizer uses the [Solana RPC PubSub WebSocket Endpoint](https://docs.solana.com/developing/clients/jsonrpc-api)
+to monitor validator votes in real time.
+
+If a lockout violation is detected, an incident log file is created with
+details.
+
+Note that some of the transaction signatures in an incident log file may not be
+available on http://explorer.solana.com. This occurs specifically when a
+transaction lands in a non-finalized fork.
+
+### RPC Node Requirements
+
+The RPC node used by the votalizer must be configured with the `--full-rpc-api`
+and `--rpc-pubsub-enable-vote-subscription` flags.
+
+It's easiest if you just run the `votalizer` on the same host as your RPC node,
+and by default the `votalizer` will already attempt to connect to `localhost`.
