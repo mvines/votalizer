@@ -143,7 +143,7 @@ impl Tower {
                             "fork at vote slot {} to common ancestor:",
                             vote_slot
                         );
-                        let _ = write!(
+                        let _ = writeln!(
                             incident,
                             "  - {}",
                             next_vote_ancestors
