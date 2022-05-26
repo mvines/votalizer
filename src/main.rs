@@ -51,6 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut processed_vote_counter = 0;
     let mut incident_counter = 0;
     let mut last_status_report = Instant::now();
+    let mut last_notifier_status_report = Instant::now();
 
     const MAX_TRACKED_ANCESTORS: usize = 10 * 1_024;
     const MAX_TRACKED_SLOTS: usize = 10 * 1_024;
@@ -86,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     let now = Instant::now();
                     if now.duration_since(last_status_report) > Duration::from_secs(30) {
-                        info!(
+                        let status_report = format!(
                             "tracking {} validators, {} votes processed{}",
                             towers.len(),
                             processed_vote_counter,
@@ -98,6 +99,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "".into()
                             }
                         );
+
+                        info!("{}", status_report);
+                        if now.duration_since(last_notifier_status_report) > Duration::from_secs(60 * 60 * 12) {
+                            notifier.send(&status_report).await;
+                            last_notifier_status_report = now;
+                        }
+
                         last_status_report = now;
                     }
                 }
