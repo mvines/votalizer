@@ -65,7 +65,7 @@ impl Tower {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn write_indicent_report(
+    fn write_incident_report(
         &self,
         vote_account_address: &Pubkey,
         vote_slot: Slot,
@@ -215,7 +215,7 @@ impl Tower {
                             last_lockout.slot,
                         );
                     } else if !next_vote_ancestors.contains(&last_lockout.slot) {
-                        maybe_incident = Some(self.write_indicent_report(
+                        maybe_incident = Some(self.write_incident_report(
                             vote_account_address,
                             vote_slot,
                             signature,
