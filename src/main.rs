@@ -48,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut slot_ancestors = BTreeMap::<Slot, HashSet<Slot>>::new();
     let mut towers = HashMap::<Pubkey, Tower>::new();
-    let mut processed_vote_counter = 0;
+    let mut processed_vote_counter = 0u64;
     let mut incident_counter = 0;
     let mut last_status_report = Instant::now();
     let mut last_notifier_status_report = Instant::now();
@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     const MAX_TRACKED_ANCESTORS: usize = 10 * 1_024;
     const MAX_TRACKED_SLOTS: usize = 10 * 1_024;
 
-    let _ = notifier.send("votalizer active").await;
+    notifier.send("votalizer active").await;
     loop {
         tokio::select! {
             Some(slot_info) = slots.next() => {
