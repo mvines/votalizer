@@ -41,6 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     solana_logger::setup_with_default("info");
 
     info!("websocket URL: {}", websocket_url);
+    notifier.send(&format!("votalizer: connecting to {}", websocket_url)).await;
 
     let pubsub_client = PubsubClient::new(&websocket_url).await?;
     let (mut votes, votes_unsubscribe) = pubsub_client.vote_subscribe().await?;
@@ -56,7 +57,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     const MAX_TRACKED_ANCESTORS: usize = 10 * 1_024;
     const MAX_TRACKED_SLOTS: usize = 10 * 1_024;
 
-    notifier.send("votalizer active").await;
     loop {
         tokio::select! {
             Some(slot_info) = slots.next() => {
