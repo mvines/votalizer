@@ -16,6 +16,13 @@ webhook to the environment before running the votalizer:
 export SLACK_WEBHOOK=https://hooks.slack.com/services/...
 ```
 
+To be notified by Discord when an incident occurs, export your desired Discord
+webhook to the environment before running the votalizer:
+```
+export DISCORD_WEBHOOK=https://discord.com/api/webhooks/...
+export DISCORD_USERNAME=username_to_show_in_message
+```
+
 ### RPC Node Requirements
 
 The RPC node used by the votalizer must be configured with the `--full-rpc-api`
