@@ -41,13 +41,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     solana_logger::setup_with_default("info");
 
     info!("websocket URL: {}", websocket_url);
-    notifier
-        .send(&format!("votalizer: connecting to {}", websocket_url))
-        .await;
 
     let pubsub_client = PubsubClient::new(&websocket_url).await?;
     let (mut votes, votes_unsubscribe) = pubsub_client.vote_subscribe().await?;
     let (mut slots, slots_unsubscribe) = pubsub_client.slot_subscribe().await?;
+    notifier
+        .send(&format!("votalizer: connected to {}", websocket_url))
+        .await;
 
     let mut slot_ancestors = BTreeMap::<Slot, HashSet<Slot>>::new();
     let mut towers = HashMap::<Pubkey, Tower>::new();
